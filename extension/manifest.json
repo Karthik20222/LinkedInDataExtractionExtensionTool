@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn Recruiter - Candidate Tracker",
+  "version": "2.0.0",
+  "description": "Track LinkedIn candidates in real-time using Google Sheets. No server needed!",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.linkedin.com/*",
+    "*://*.googleapis.com/*",
+    "https://oauth2.googleapis.com/*",
+    "https://sheets.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.linkedin.com/talent/*",
+        "*://*.linkedin.com/recruiter/*",
+        "*://*.linkedin.com/in/*"
+      ],
+      "js": [
+        "jsrsasign.min.js",
+        "google-sheets-db.js",
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "LinkedIn Recruiter Tracker"
+  },
+  "options_page": "settings.html",
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "styles.css"
+      ],
+      "matches": [
+        "*://*.linkedin.com/*"
+      ]
+    }
+  ]
+}

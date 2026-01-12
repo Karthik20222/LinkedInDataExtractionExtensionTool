@@ -1,0 +1,194 @@
+/* LinkedIn Candidate Tracker - Styles */
+
+/* Warning Banner - Already Processed */
+.linkedin-tracker-banner-warning {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+    color: white;
+    padding: 16px 20px;
+    z-index: 999999;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    animation: slideDown 0.3s ease-out;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+/* Success Banner - New Candidate Added */
+.linkedin-tracker-banner-success {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #00c853 0%, #009624 100%);
+    color: white;
+    padding: 16px 20px;
+    z-index: 999999;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    animation: slideDown 0.3s ease-out;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 1200px;
+    margin: 0 auto;
+    gap: 16px;
+}
+
+.banner-icon {
+    font-size: 32px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.banner-text {
+    flex: 1;
+    text-align: left;
+}
+
+.banner-text strong {
+    font-size: 18px;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.banner-text p {
+    margin: 2px 0;
+    font-size: 14px;
+    opacity: 0.95;
+}
+
+.banner-close {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    font-size: 20px;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.banner-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+/* Animation */
+@keyframes slideDown {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Tracker form styles */
+.tracker-form {
+    display: block !important;
+    margin-top: 10px;
+    background: rgba(255, 255, 255, 0.12);
+    padding: 12px;
+    border-radius: 8px;
+    width: 100%;
+}
+
+.tracker-label {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 6px;
+    margin-top: 8px;
+    opacity: 0.95;
+    font-weight: 500;
+}
+
+.tracker-input, .tracker-textarea {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: none;
+    outline: none;
+    margin-bottom: 10px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.tracker-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.tracker-button {
+    padding: 10px 14px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    background: #ffffff;
+    color: #0a66c2;
+}
+
+.tracker-button:disabled {
+    opacity: 0.8;
+    cursor: default;
+}
+
+.tracker-button-danger {
+    background: #ffdddd;
+    color: #b00020;
+    border: 1px solid #ff8a80;
+}
+
+.tracker-button-danger:hover {
+    filter: brightness(0.98);
+}
+
+/* Push down LinkedIn content when banner is visible */
+body:has(.linkedin-tracker-banner-warning),
+body:has(.linkedin-tracker-banner-success) {
+    padding-top: 80px !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .banner-content {
+        flex-direction: column;
+        text-align: center;
+        gap: 12px;
+    }
+    
+    .banner-text {
+        text-align: center;
+    }
+    
+    .banner-text strong {
+        font-size: 16px;
+    }
+    
+    .banner-text p {
+        font-size: 13px;
+    }
+    
+    .banner-icon {
+        font-size: 28px;
+    }
+}

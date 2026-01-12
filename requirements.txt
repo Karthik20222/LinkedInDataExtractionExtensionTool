@@ -1,0 +1,28 @@
+======================================================================================
+LinkedIn Profile Data Extraction Chrome Extension tool
+------------------------------------------------------
+First I will explain who am i and what are my requirements and about my role and my company profile so you get the knowledge about
+what i trying to expect from you as agent.
+------------------------------------------------------
+My company name is Kushi Structural Civil Structural consultancy Pvt Ltd which is an civil and structural engineering based recruting and staffing company which 
+mainly recruits candidates from LTTS and Other companies and Oil and natural gas companies For experienced candidates from oil and natural gas companies and oil and petroleum companies both onshore and offshore experiences of various roles.
+------------------------------------------------------
+so as part of recruting and recruitment process we use LinkedIn recruiter for job postings and candidate processing
+so this everytime the hr after the candidate applies the job postings via LinkedIn the same candidate is processed again
+with say two other recruiters so it wastes their time and resources.
+--------------------------------
+In specific I want reduce the time of visiting or tracking the same candidate again and again if the linkedin profile is already present in database or excel sheet If the same candidate is already processed say so many ago so we can avoid tracking the candidate again and again 
+right so we can increase the productivity right 
+-------------------------------------
+so here is my requirements 
+---------------------------
+1.After loggin through linkedin job recruiter profile the entire data of job application should be in our database
+2.everytime the recruiter or hr reviewing the linkedin profile of candidate who applied for the job posting their all the datas should be in database with name,location,headline,role,current company,experience,tagline and contact details if availabe 
+3.So after one hr processed the candidate profile if the other hr reviewing the same candidate again the chrome extension should warn like already process click here to view data take to the database site
+4.So this is my requirements the extension should run on linkedin site and should help me with optimizing the productivity
+
+So i'm software engineer with experience of 1year assigned for creating this extension building,developing and testing and developing task
+-----------------------------------------
+so help with the same
+
+//so with these all these requirements convert this javascript object notation or toon format or best prompt for git copilot agent to assign this task and ask question if you need any clarifications
