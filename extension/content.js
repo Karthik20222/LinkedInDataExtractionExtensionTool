@@ -210,8 +210,10 @@ function extractLatestExperience() {
 
         // Additional selectors to refine when available
         title = entity.querySelector('.t-bold, .pvs-entity__title, .mr1')?.innerText?.trim() || title;
-        const companyEl = entity.querySelector('.t-14.t-normal, .pv-entity__secondary-title, .pvs-entity__subtitle');
+        const companyEl = entity.querySelector('.pvs-entity__subtitle span[aria-hidden="true"], .pv-entity__secondary-title, .pvs-entity__subtitle');
         company = companyEl?.innerText?.split('·')[0].trim() || company;
+        // Final pass: filter out employment types like "Full-time" and prefer anchor text
+        company = extractCompanyFromEntity(entity, lines) || company;
 
         // Extract years at current company (from first/current experience)
         const yearsAtCurrent = extractDurationFromEntity(entity);
@@ -222,6 +224,49 @@ function extractLatestExperience() {
         return { title, company, yearsAtCurrent, totalYears };
     } catch (_) {
         return { title: '', company: '', yearsAtCurrent: '', totalYears: '' };
+    }
+}
+
+/**
+ * Extract company name robustly from an experience entity
+ * Avoids picking employment type (e.g., "Full-time")
+ */
+function extractCompanyFromEntity(entity, lines = []) {
+    try {
+        const EMPLOYMENT_TYPES = /full[- ]?time|part[- ]?time|self[- ]?employed|contract|internship|freelance|temporary|apprenticeship|trainee/i;
+
+        // 1) Preferred: subtitle container specifically for company
+        const sub = entity.querySelector('.pvs-entity__subtitle');
+        if (sub) {
+            const spans = Array.from(sub.querySelectorAll('span[aria-hidden="true"]'))
+                .map(s => s.innerText?.trim())
+                .filter(Boolean);
+            const hit = spans.find(t => !EMPLOYMENT_TYPES.test(t));
+            if (hit) return hit;
+        }
+
+        // 2) Anchor wrapper often contains company name
+        const anchorSpan = entity.querySelector('a.optional-action-target-wrapper span[aria-hidden="true"]');
+        if (anchorSpan && !EMPLOYMENT_TYPES.test(anchorSpan.innerText || '')) {
+            return anchorSpan.innerText.trim();
+        }
+
+        // 3) Any normal text spans but exclude employment types and duration/location pieces
+        const normalSpans = Array.from(entity.querySelectorAll('.t-14.t-normal span[aria-hidden="true"]'))
+            .map(s => s.innerText?.trim())
+            .filter(Boolean);
+        const candidate = normalSpans.find(t => !EMPLOYMENT_TYPES.test(t) && !/[•·]/.test(t) && !/(yrs?|mos?)/i.test(t));
+        if (candidate) return candidate;
+
+        // 4) Fallback to line heuristic: pick the first non-employment-type line
+        if (Array.isArray(lines) && lines.length) {
+            const lineHit = lines.find(l => l && !EMPLOYMENT_TYPES.test(l) && !/(yrs?|mos?)/i.test(l) && !/^[A-Za-z\s-]*time$/i.test(l));
+            if (lineHit) return lineHit.split('·')[0].trim();
+        }
+
+        return '';
+    } catch (_) {
+        return '';
     }
 }
 
