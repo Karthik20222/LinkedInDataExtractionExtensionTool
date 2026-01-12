@@ -211,11 +211,13 @@ class GoogleSheetsDB {
                 new Date().toISOString().split('T')[0],
                 candidateData.qualification || '',      // K: Qualification
                 candidateData.passout || '',            // L: Passout
-                ''                                      // M: Recruiter Name/Email
+                '',                                      // M: Recruiter Name/Email
+                candidateData.years_at_current || '',   // N: Years at Current Company
+                candidateData.total_years_experience || '' // O: Total Years of Experience
             ]];
 
             const response = await fetch(
-                `${this.apiUrl}/${this.credentials.sheet_id}/values/Sheet1!A:M:append?valueInputOption=USER_ENTERED`,
+                `${this.apiUrl}/${this.credentials.sheet_id}/values/Sheet1!A:O:append?valueInputOption=USER_ENTERED`,
                 {
                     method: 'POST',
                     headers: {
@@ -245,7 +247,7 @@ class GoogleSheetsDB {
     async getAllCandidates() {
         try {
             const token = await this.authenticate();
-            const range = 'Sheet1!A:M';
+            const range = 'Sheet1!A:O';
 
             const response = await fetch(
                 `${this.apiUrl}/${this.credentials.sheet_id}/values/${range}`,
@@ -274,7 +276,9 @@ class GoogleSheetsDB {
                 addedDate: row[9] || '',
                 qualification: row[10] || '',   // K: Qualification
                 passout: row[11] || '',         // L: Passout
-                processedBy: row[12] || ''      // M: Recruiter Name/Email
+                processedBy: row[12] || '',     // M: Recruiter Name/Email
+                yearsAtCurrent: row[13] || '',  // N: Years at Current Company
+                totalYears: row[14] || ''       // O: Total Years of Experience
             }));
 
             console.log('[GoogleSheetsDB] Retrieved', candidates.length, 'candidates');
@@ -340,7 +344,7 @@ class GoogleSheetsDB {
     /**
      * Update candidate fields (company, notes, processedBy)
      */
-    async updateCandidateFields(linkedInId, { company, notes, processedBy }) {
+    async updateCandidateFields(linkedInId, { company, notes, processedBy, yearsAtCurrent, totalYears }) {
         try {
             const token = await this.authenticate();
             const candidates = await this.getAllCandidates();
@@ -350,6 +354,7 @@ class GoogleSheetsDB {
 
             // Build sequential updates for provided fields
             // Column F = Company (index 5), Column H = Notes (index 7), Column M = Processed By
+            // Column N = Years at Current, Column O = Total Years
             const updates = [];
             if (typeof company === 'string') {
                 updates.push(fetch(
@@ -378,6 +383,26 @@ class GoogleSheetsDB {
                         method: 'PUT',
                         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ values: [[processedBy]] })
+                    }
+                ));
+            }
+            if (typeof yearsAtCurrent === 'string') {
+                updates.push(fetch(
+                    `${this.apiUrl}/${this.credentials.sheet_id}/values/Sheet1!N${rowIndex}?valueInputOption=USER_ENTERED`,
+                    {
+                        method: 'PUT',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ values: [[yearsAtCurrent]] })
+                    }
+                ));
+            }
+            if (typeof totalYears === 'string') {
+                updates.push(fetch(
+                    `${this.apiUrl}/${this.credentials.sheet_id}/values/Sheet1!O${rowIndex}?valueInputOption=USER_ENTERED`,
+                    {
+                        method: 'PUT',
+                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ values: [[totalYears]] })
                     }
                 ));
             }

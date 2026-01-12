@@ -237,7 +237,7 @@ async function getGoogleSheetsDB() {
 
         async getCandidateCount() {
             const response = await fetch(
-                `https://sheets.googleapis.com/v4/spreadsheets/${this.credentials.sheet_id}/values/Sheet1!A:M`,
+                `https://sheets.googleapis.com/v4/spreadsheets/${this.credentials.sheet_id}/values/Sheet1!A:O`,
                 { headers: { Authorization: `Bearer ${this.accessToken}` } }
             );
 

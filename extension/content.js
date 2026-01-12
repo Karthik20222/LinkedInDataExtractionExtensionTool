@@ -162,7 +162,10 @@ function extractProfileData(memberId) {
             current_company: exp.company || currentCompany || '',
             passout: edu.passout || '',
             qualification: edu.qualification || '',
-            profile_url: window.location.href.split('?')[0]
+            profile_url: window.location.href.split('?')[0],
+            // Years of experience
+            years_at_current: exp.yearsAtCurrent || '',
+            total_years_experience: exp.totalYears || ''
         };
 
         debug('Extracted profile data:', profileData);
@@ -184,11 +187,11 @@ function extractLatestExperience() {
             // Fallback: find a section that contains the word "Experience"
             section = Array.from(document.querySelectorAll('section')).find(sec => /experience/i.test(sec.textContent || '')) || null;
         }
-        if (!section) return { title: '', company: '' };
+        if (!section) return { title: '', company: '', yearsAtCurrent: '', totalYears: '' };
 
         // Find first experience entity
         const entity = section.querySelector('[data-view-name="profile-component-entity"], li.artdeco-list__item, .pvs-entity');
-        if (!entity) return { title: '', company: '' };
+        if (!entity) return { title: '', company: '', yearsAtCurrent: '', totalYears: '' };
 
         // Heuristic: split visible text into lines and pick sensible fields
         const lines = (entity.innerText || '')
@@ -210,10 +213,129 @@ function extractLatestExperience() {
         const companyEl = entity.querySelector('.t-14.t-normal, .pv-entity__secondary-title, .pvs-entity__subtitle');
         company = companyEl?.innerText?.split('·')[0].trim() || company;
 
-        return { title, company };
+        // Extract years at current company (from first/current experience)
+        const yearsAtCurrent = extractDurationFromEntity(entity);
+        
+        // Calculate total years of experience from all positions
+        const totalYears = calculateTotalExperience(section);
+
+        return { title, company, yearsAtCurrent, totalYears };
     } catch (_) {
-        return { title: '', company: '' };
+        return { title: '', company: '', yearsAtCurrent: '', totalYears: '' };
     }
+}
+
+/**
+ * Extract duration from a single experience entity
+ */
+function extractDurationFromEntity(entity) {
+    try {
+        // Look for duration text in caption wrapper (e.g., "Sep 2025 - Present · 5 mos")
+        const captionWrappers = entity.querySelectorAll('.pvs-entity__caption-wrapper, span.t-14.t-normal.t-black--light span[aria-hidden="true"]');
+        
+        for (const wrapper of captionWrappers) {
+            const text = wrapper.innerText?.trim() || '';
+            
+            // Match patterns like "5 mos", "2 yrs", "1 yr 3 mos", "2 yrs 6 mos"
+            const yearsMatch = text.match(/(\d+)\s*(?:yr|yrs|year|years)/i);
+            const monthsMatch = text.match(/(\d+)\s*(?:mo|mos|month|months)/i);
+            
+            if (yearsMatch || monthsMatch) {
+                const years = yearsMatch ? parseInt(yearsMatch[1], 10) : 0;
+                const months = monthsMatch ? parseInt(monthsMatch[1], 10) : 0;
+                return formatDuration(years, months);
+            }
+        }
+        
+        // Fallback: check innerText lines for duration pattern
+        const lines = (entity.innerText || '').split('\n').map(t => t.trim());
+        for (const line of lines) {
+            const yearsMatch = line.match(/(\d+)\s*(?:yr|yrs|year|years)/i);
+            const monthsMatch = line.match(/(\d+)\s*(?:mo|mos|month|months)/i);
+            
+            if (yearsMatch || monthsMatch) {
+                const years = yearsMatch ? parseInt(yearsMatch[1], 10) : 0;
+                const months = monthsMatch ? parseInt(monthsMatch[1], 10) : 0;
+                return formatDuration(years, months);
+            }
+        }
+        
+        return '';
+    } catch (_) {
+        return '';
+    }
+}
+
+/**
+ * Calculate total years of experience from all experience entries
+ */
+function calculateTotalExperience(section) {
+    try {
+        let totalMonths = 0;
+        
+        // Find all experience entities in the section
+        const entities = section.querySelectorAll('[data-view-name="profile-component-entity"], li.artdeco-list__item, .pvs-entity');
+        
+        for (const entity of entities) {
+            // Look for duration text in caption wrapper
+            const captionWrappers = entity.querySelectorAll('.pvs-entity__caption-wrapper, span.t-14.t-normal.t-black--light span[aria-hidden="true"]');
+            
+            let found = false;
+            for (const wrapper of captionWrappers) {
+                const text = wrapper.innerText?.trim() || '';
+                
+                // Match patterns like "5 mos", "2 yrs", "1 yr 3 mos"
+                const yearsMatch = text.match(/(\d+)\s*(?:yr|yrs|year|years)/i);
+                const monthsMatch = text.match(/(\d+)\s*(?:mo|mos|month|months)/i);
+                
+                if (yearsMatch || monthsMatch) {
+                    const years = yearsMatch ? parseInt(yearsMatch[1], 10) : 0;
+                    const months = monthsMatch ? parseInt(monthsMatch[1], 10) : 0;
+                    totalMonths += (years * 12) + months;
+                    found = true;
+                    break;
+                }
+            }
+            
+            // Fallback: check innerText lines
+            if (!found) {
+                const lines = (entity.innerText || '').split('\n').map(t => t.trim());
+                for (const line of lines) {
+                    const yearsMatch = line.match(/(\d+)\s*(?:yr|yrs|year|years)/i);
+                    const monthsMatch = line.match(/(\d+)\s*(?:mo|mos|month|months)/i);
+                    
+                    if (yearsMatch || monthsMatch) {
+                        const years = yearsMatch ? parseInt(yearsMatch[1], 10) : 0;
+                        const months = monthsMatch ? parseInt(monthsMatch[1], 10) : 0;
+                        totalMonths += (years * 12) + months;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (totalMonths === 0) return '';
+        
+        const totalYears = Math.floor(totalMonths / 12);
+        const remainingMonths = totalMonths % 12;
+        return formatDuration(totalYears, remainingMonths);
+    } catch (_) {
+        return '';
+    }
+}
+
+/**
+ * Format duration as "X yrs Y mos" or "X yrs" or "Y mos"
+ */
+function formatDuration(years, months) {
+    if (years > 0 && months > 0) {
+        return `${years} yr${years > 1 ? 's' : ''} ${months} mo${months > 1 ? 's' : ''}`;
+    } else if (years > 0) {
+        return `${years} yr${years > 1 ? 's' : ''}`;
+    } else if (months > 0) {
+        return `${months} mo${months > 1 ? 's' : ''}`;
+    }
+    return '';
 }
 
 /**
@@ -435,6 +557,10 @@ function injectProcessForm({ type, profileData, processedBy }) {
                     ${type === 'new' ? `
                     <label class="tracker-label">Company Name (Optional)</label>
                     <textarea id="tracker-company" class="tracker-textarea" placeholder="Company name">${profileData.current_company || ''}</textarea>
+                    <label class="tracker-label">Years at Current Company (Optional)</label>
+                    <input type="text" id="tracker-years-current" class="tracker-input" placeholder="e.g., 2 yrs 6 mos" value="${profileData.years_at_current || ''}" />
+                    <label class="tracker-label">Total Years of Experience (Optional)</label>
+                    <input type="text" id="tracker-total-years" class="tracker-input" placeholder="e.g., 5 yrs 3 mos" value="${profileData.total_years_experience || ''}" />
                     ` : ''}
                     <label class="tracker-label">Notes (Optional)</label>
                     <textarea id="tracker-notes" class="tracker-textarea" placeholder="Add notes..."></textarea>
@@ -458,6 +584,8 @@ function injectProcessForm({ type, profileData, processedBy }) {
     saveBtn?.addEventListener('click', async () => {
         const processed_by = banner.querySelector('#tracker-processed-by')?.value.trim() || '';
         const company = banner.querySelector('#tracker-company') ? banner.querySelector('#tracker-company').value.trim() : '';
+        const yearsAtCurrent = banner.querySelector('#tracker-years-current') ? banner.querySelector('#tracker-years-current').value.trim() : '';
+        const totalYears = banner.querySelector('#tracker-total-years') ? banner.querySelector('#tracker-total-years').value.trim() : '';
         const notes = banner.querySelector('#tracker-notes')?.value.trim() || '';
 
         saveBtn.disabled = true;
@@ -465,7 +593,13 @@ function injectProcessForm({ type, profileData, processedBy }) {
 
         try {
             if (googleSheetsDB) {
-                const result = await googleSheetsDB.updateCandidateFields(profileData.member_id, { company, notes, processedBy: processed_by });
+                const result = await googleSheetsDB.updateCandidateFields(profileData.member_id, { 
+                    company, 
+                    notes, 
+                    processedBy: processed_by,
+                    yearsAtCurrent,
+                    totalYears
+                });
                 if (!result.success) throw new Error(result.error || 'Update failed');
             }
             saveBtn.innerHTML = '✓ Saved';
