@@ -209,7 +209,7 @@ function extractLatestExperience() {
         }
 
         // Additional selectors to refine when available
-        title = entity.querySelector('.t-bold, .pvs-entity__title, .mr1')?.innerText?.trim() || title;
+        title = extractTitleFromEntity(entity, lines) || title;
         const companyEl = entity.querySelector('.pvs-entity__subtitle span[aria-hidden="true"], .pv-entity__secondary-title, .pvs-entity__subtitle');
         company = companyEl?.innerText?.split('·')[0].trim() || company;
         // Final pass: filter out employment types like "Full-time" and prefer anchor text
@@ -224,6 +224,35 @@ function extractLatestExperience() {
         return { title, company, yearsAtCurrent, totalYears };
     } catch (_) {
         return { title: '', company: '', yearsAtCurrent: '', totalYears: '' };
+    }
+}
+
+/**
+ * Extract designation/title robustly from an experience entity
+ */
+function extractTitleFromEntity(entity, lines = []) {
+    try {
+        const EMPLOYMENT_TYPES = /full[- ]?time|part[- ]?time|self[- ]?employed|contract|internship|intern|apprentice|trainee/i;
+        const DURATION = /(\d+\s*(?:yr|yrs|year|years|mo|mos|month|months))/i;
+
+        // 1) Preferred: title span
+        const titleEl = entity.querySelector('.pvs-entity__title span[aria-hidden="true"], .t-bold span[aria-hidden="true"], .mr1 span[aria-hidden="true"]');
+        const fromSpan = titleEl?.innerText?.trim();
+        if (fromSpan && !EMPLOYMENT_TYPES.test(fromSpan) && !DURATION.test(fromSpan)) return fromSpan;
+
+        // 2) Fallback: text in .t-bold directly
+        const boldText = entity.querySelector('.pvs-entity__title, .t-bold, .mr1')?.innerText?.trim();
+        if (boldText && !EMPLOYMENT_TYPES.test(boldText) && !DURATION.test(boldText)) return boldText;
+
+        // 3) Lines heuristic: pick the first line that is not employment type, not duration, and not empty
+        if (Array.isArray(lines) && lines.length) {
+            const hit = lines.find(l => l && !EMPLOYMENT_TYPES.test(l) && !DURATION.test(l));
+            if (hit) return hit;
+        }
+
+        return '';
+    } catch (_) {
+        return '';
     }
 }
 
