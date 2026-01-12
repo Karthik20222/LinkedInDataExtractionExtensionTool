@@ -193,27 +193,9 @@ function extractLatestExperience() {
         const entity = section.querySelector('[data-view-name="profile-component-entity"], li.artdeco-list__item, .pvs-entity');
         if (!entity) return { title: '', company: '', yearsAtCurrent: '', totalYears: '' };
 
-        // Heuristic: split visible text into lines and pick sensible fields
-        const lines = (entity.innerText || '')
-            .split('\n')
-            .map(t => t.trim())
-            .filter(Boolean);
-
-        let title = '';
-        let company = '';
-        if (lines.length) {
-            title = lines[0];
-            if (lines[1]) {
-                company = lines[1].split('·')[0].trim();
-            }
-        }
-
-        // Additional selectors to refine when available
-        title = extractTitleFromEntity(entity, lines) || title;
-        const companyEl = entity.querySelector('.pvs-entity__subtitle span[aria-hidden="true"], .pv-entity__secondary-title, .pvs-entity__subtitle');
-        company = companyEl?.innerText?.split('·')[0].trim() || company;
-        // Final pass: filter out employment types like "Full-time" and prefer anchor text
-        company = extractCompanyFromEntity(entity, lines) || company;
+        // Use dedicated helpers for robust extraction
+        const title = extractTitleFromEntity(entity);
+        const company = extractCompanyFromEntity(entity);
 
         // Extract years at current company (from first/current experience)
         const yearsAtCurrent = extractDurationFromEntity(entity);
@@ -230,25 +212,25 @@ function extractLatestExperience() {
 /**
  * Extract designation/title robustly from an experience entity
  */
-function extractTitleFromEntity(entity, lines = []) {
+function extractTitleFromEntity(entity) {
     try {
         const EMPLOYMENT_TYPES = /full[- ]?time|part[- ]?time|self[- ]?employed|contract|internship|intern|apprentice|trainee/i;
         const DURATION = /(\d+\s*(?:yr|yrs|year|years|mo|mos|month|months))/i;
 
-        // 1) Preferred: title span
-        const titleEl = entity.querySelector('.pvs-entity__title span[aria-hidden="true"], .t-bold span[aria-hidden="true"], .mr1 span[aria-hidden="true"]');
-        const fromSpan = titleEl?.innerText?.trim();
-        if (fromSpan && !EMPLOYMENT_TYPES.test(fromSpan) && !DURATION.test(fromSpan)) return fromSpan;
+        // 1) Look for title in the pvs-entity__title specifically (main job title)
+        const titleEl = entity.querySelector('.pvs-entity__title span[aria-hidden="true"]');
+        if (titleEl) {
+            const text = titleEl.innerText?.trim();
+            if (text && !EMPLOYMENT_TYPES.test(text) && !DURATION.test(text)) return text;
+        }
 
-        // 2) Fallback: text in .t-bold directly
-        const boldText = entity.querySelector('.pvs-entity__title, .t-bold, .mr1')?.innerText?.trim();
+        // 2) Try any bold text at the top of the entity
+        const boldText = entity.querySelector('.t-bold')?.innerText?.trim();
         if (boldText && !EMPLOYMENT_TYPES.test(boldText) && !DURATION.test(boldText)) return boldText;
 
-        // 3) Lines heuristic: pick the first line that is not employment type, not duration, and not empty
-        if (Array.isArray(lines) && lines.length) {
-            const hit = lines.find(l => l && !EMPLOYMENT_TYPES.test(l) && !DURATION.test(l));
-            if (hit) return hit;
-        }
+        // 3) Try first h3/h4 heading
+        const heading = entity.querySelector('h3, h4')?.innerText?.trim();
+        if (heading && !EMPLOYMENT_TYPES.test(heading) && !DURATION.test(heading)) return heading;
 
         return '';
     } catch (_) {
@@ -260,38 +242,33 @@ function extractTitleFromEntity(entity, lines = []) {
  * Extract company name robustly from an experience entity
  * Avoids picking employment type (e.g., "Full-time")
  */
-function extractCompanyFromEntity(entity, lines = []) {
+function extractCompanyFromEntity(entity) {
     try {
         const EMPLOYMENT_TYPES = /full[- ]?time|part[- ]?time|self[- ]?employed|contract|internship|freelance|temporary|apprenticeship|trainee/i;
 
-        // 1) Preferred: subtitle container specifically for company
+        // 1) The subtitle container has the company name (second line)
         const sub = entity.querySelector('.pvs-entity__subtitle');
         if (sub) {
             const spans = Array.from(sub.querySelectorAll('span[aria-hidden="true"]'))
                 .map(s => s.innerText?.trim())
                 .filter(Boolean);
-            const hit = spans.find(t => !EMPLOYMENT_TYPES.test(t));
+            const hit = spans.find(t => !EMPLOYMENT_TYPES.test(t) && !/(yrs?|mos?)/i.test(t));
             if (hit) return hit;
         }
 
-        // 2) Anchor wrapper often contains company name
-        const anchorSpan = entity.querySelector('a.optional-action-target-wrapper span[aria-hidden="true"]');
-        if (anchorSpan && !EMPLOYMENT_TYPES.test(anchorSpan.innerText || '')) {
-            return anchorSpan.innerText.trim();
+        // 2) Try anchor in subtitle
+        const anchorInSub = entity.querySelector('.pvs-entity__subtitle a span[aria-hidden="true"]');
+        if (anchorInSub) {
+            const text = anchorInSub.innerText?.trim();
+            if (text && !EMPLOYMENT_TYPES.test(text)) return text;
         }
 
-        // 3) Any normal text spans but exclude employment types and duration/location pieces
-        const normalSpans = Array.from(entity.querySelectorAll('.t-14.t-normal span[aria-hidden="true"]'))
+        // 3) Fallback: any link text in the entity that looks like a company
+        const allLinks = Array.from(entity.querySelectorAll('a[href*="company"] span[aria-hidden="true"]'))
             .map(s => s.innerText?.trim())
             .filter(Boolean);
-        const candidate = normalSpans.find(t => !EMPLOYMENT_TYPES.test(t) && !/[•·]/.test(t) && !/(yrs?|mos?)/i.test(t));
-        if (candidate) return candidate;
-
-        // 4) Fallback to line heuristic: pick the first non-employment-type line
-        if (Array.isArray(lines) && lines.length) {
-            const lineHit = lines.find(l => l && !EMPLOYMENT_TYPES.test(l) && !/(yrs?|mos?)/i.test(l) && !/^[A-Za-z\s-]*time$/i.test(l));
-            if (lineHit) return lineHit.split('·')[0].trim();
-        }
+        const companyLink = allLinks.find(t => !EMPLOYMENT_TYPES.test(t));
+        if (companyLink) return companyLink;
 
         return '';
     } catch (_) {
