@@ -236,7 +236,13 @@ class GoogleSheetsDB {
             console.log('[GoogleSheetsDB] Candidate added successfully:', candidateData.full_name);
             return { success: true, data: candidateData };
         } catch (error) {
-            console.error('[GoogleSheetsDB] Error adding candidate:', error);
+            // Log additional context to make network issues easier to debug
+            console.error('[GoogleSheetsDB] Error adding candidate:', {
+                error,
+                sheetId: this.credentials?.sheet_id,
+                hasToken: Boolean(this.accessToken),
+                url: `${this.apiUrl}/${this.credentials?.sheet_id}/values/Sheet1!A:O:append`
+            });
             return { success: false, error: error.message };
         }
     }
