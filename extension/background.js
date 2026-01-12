@@ -8,17 +8,8 @@ chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'install') {
         console.log('LinkedIn Candidate Tracker installed!');
         
-        // Open welcome page
-        chrome.tabs.create({
-            url: 'https://github.com/yourusername/linkedin-tracker'
-        });
-        
-        // Set default settings
-        chrome.storage.local.set({
-            apiUrl: 'http://localhost:3000/api',
-            autoCheck: true,
-            showNotifications: true
-        });
+        // Open settings page on first install
+        chrome.runtime.openOptionsPage();
     } else if (details.reason === 'update') {
         console.log('LinkedIn Candidate Tracker updated!');
     }
