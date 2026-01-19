@@ -155,8 +155,6 @@ async function init() {
     const isConfigured = await checkConfigurationStatus();
     if (isConfigured) {
         await getTotalCandidates();
-    } else {
-        showStatus('⚠️ Please configure Google Sheets in Settings', 'error');
     }
 }
 

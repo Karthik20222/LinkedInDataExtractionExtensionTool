@@ -245,30 +245,51 @@ function extractTitleFromEntity(entity) {
 function extractCompanyFromEntity(entity) {
     try {
         const EMPLOYMENT_TYPES = /full[- ]?time|part[- ]?time|self[- ]?employed|contract|internship|freelance|temporary|apprenticeship|trainee/i;
+        const SKIP_WORDS = /^(at|location)$/i;
 
-        // 1) The subtitle container has the company name (second line)
+        // 1) Look for company link (href contains company) in subtitle - BEST SOURCE
+        const companyLinkInSub = entity.querySelector('.pvs-entity__subtitle a[href*="company"] span[aria-hidden="true"]');
+        if (companyLinkInSub) {
+            const text = companyLinkInSub.innerText?.trim();
+            if (text && !EMPLOYMENT_TYPES.test(text) && !SKIP_WORDS.test(text) && text.length > 1) {
+                return text;
+            }
+        }
+
+        // 2) The subtitle container has the company name (second line)
+        // Look for all text in subtitle and find the company (first non-employment-type text)
         const sub = entity.querySelector('.pvs-entity__subtitle');
         if (sub) {
-            const spans = Array.from(sub.querySelectorAll('span[aria-hidden="true"]'))
+            const allText = sub.innerText?.trim() || '';
+            // Split by bullet point or dash to get individual parts
+            const parts = allText.split(/[•·\-]/).map(p => p.trim()).filter(Boolean);
+            
+            for (const part of parts) {
+                // Skip employment types and duration patterns
+                if (!EMPLOYMENT_TYPES.test(part) && 
+                    !/\d+\s*(yr|yrs|mo|mos|month|months|year|years)/i.test(part) &&
+                    !/^(at|location)$/i.test(part) &&
+                    part.length > 1) {
+                    return part; // Return first valid part (usually company name)
+                }
+            }
+        }
+
+        // 3) If no link found, try getting text from spans directly
+        const sub2 = entity.querySelector('.pvs-entity__subtitle');
+        if (sub2) {
+            const spans = Array.from(sub2.querySelectorAll('span[aria-hidden="true"]'))
                 .map(s => s.innerText?.trim())
-                .filter(Boolean);
-            const hit = spans.find(t => !EMPLOYMENT_TYPES.test(t) && !/(yrs?|mos?)/i.test(t));
-            if (hit) return hit;
+                .filter(t => t && t.length > 1);
+            
+            // Find first span that isn't employment type
+            const company = spans.find(t => 
+                !EMPLOYMENT_TYPES.test(t) && 
+                !/\d+\s*(yr|yrs|mo|mos|month|months|year|years)/i.test(t) &&
+                !/present|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{4}/i.test(t)
+            );
+            if (company) return company;
         }
-
-        // 2) Try anchor in subtitle
-        const anchorInSub = entity.querySelector('.pvs-entity__subtitle a span[aria-hidden="true"]');
-        if (anchorInSub) {
-            const text = anchorInSub.innerText?.trim();
-            if (text && !EMPLOYMENT_TYPES.test(text)) return text;
-        }
-
-        // 3) Fallback: any link text in the entity that looks like a company
-        const allLinks = Array.from(entity.querySelectorAll('a[href*="company"] span[aria-hidden="true"]'))
-            .map(s => s.innerText?.trim())
-            .filter(Boolean);
-        const companyLink = allLinks.find(t => !EMPLOYMENT_TYPES.test(t));
-        if (companyLink) return companyLink;
 
         return '';
     } catch (_) {
@@ -522,14 +543,16 @@ function extractCurrentCompany() {
     const companySelectors = [
         '.profile-topcard__company-link',
         '[data-test-profile-company]',
-        '.pv-top-card--experience-list-item .t-14'
+        '.pv-top-card--experience-list-item .t-14',
+        'a[href*="company"] span[aria-hidden="true"]'
     ];
 
     for (const selector of companySelectors) {
         const el = document.querySelector(selector);
         if (el && el.textContent) {
             const text = el.textContent.trim();
-            if (text && text.length > 2) {
+            // Avoid employment types
+            if (text && text.length > 2 && !/full[- ]?time|part[- ]?time|contract|intern/i.test(text)) {
                 return text;
             }
         }
@@ -617,10 +640,10 @@ function injectProcessForm({ type, profileData, processedBy }) {
                     <textarea id="tracker-notes" class="tracker-textarea" placeholder="Add notes..."></textarea>
                     <div class="tracker-actions">
                         <button id="tracker-save" class="tracker-button">✓ Save & Update</button>
-                        <button id="close-banner" class="banner-close">✕</button>
                     </div>
                 </div>
             </div>
+            <button id="close-banner" class="banner-close">✕</button>
         </div>
     `;
 
