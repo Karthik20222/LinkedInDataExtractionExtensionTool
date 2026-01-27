@@ -8,7 +8,7 @@
     right: 0;
     background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
     color: white;
-    padding: 16px 20px;
+    padding: 24px 28px;
     z-index: 999999;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     animation: slideDown 0.3s ease-out;
@@ -23,12 +23,12 @@
     right: 0;
     background: linear-gradient(135deg, #00c853 0%, #009624 100%);
     color: white;
-    padding: 12px 20px;
+    padding: 24px 28px;
     z-index: 999999;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     animation: slideDown 0.3s ease-out;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    max-height: 140px;
+    max-height: 200px;
     overflow-y: auto;
 }
 
@@ -38,12 +38,12 @@
     justify-content: flex-start;
     max-width: 1200px;
     margin: 0 auto;
-    gap: 16px;
+    gap: 20px;
     flex-wrap: wrap;
 }
 
 .banner-icon {
-    font-size: 24px;
+    font-size: 32px;
     line-height: 1;
     flex-shrink: 0;
     margin-top: 2px;
@@ -56,15 +56,15 @@
 }
 
 .banner-text strong {
-    font-size: 14px;
+    font-size: 18px;
     font-weight: 600;
     display: block;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
 }
 
 .banner-text p {
     margin: 0;
-    font-size: 12px;
+    font-size: 14px;
     opacity: 0.95;
 }
 
@@ -108,18 +108,18 @@
 .tracker-form {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-top: 8px;
+    gap: 12px;
+    margin-top: 12px;
     background: rgba(255, 255, 255, 0.15);
-    padding: 10px;
+    padding: 14px;
     border-radius: 6px;
     width: 100%;
 }
 
 .tracker-label {
     display: block;
-    font-size: 11px;
-    margin-bottom: 3px;
+    font-size: 13px;
+    margin-bottom: 5px;
     margin-top: 0;
     opacity: 0.95;
     font-weight: 500;
@@ -129,12 +129,12 @@
 .tracker-input, .tracker-textarea {
     display: block;
     width: 100%;
-    padding: 6px 8px;
+    padding: 10px 12px;
     border-radius: 4px;
     border: none;
     outline: none;
     margin-bottom: 0;
-    font-size: 12px;
+    font-size: 14px;
     box-sizing: border-box;
     grid-column: 1 / -1;
 }
@@ -149,14 +149,14 @@
 }
 
 .tracker-button {
-    padding: 6px 10px;
+    padding: 10px 16px;
     border: none;
     border-radius: 4px;
     cursor: pointer;
     font-weight: 600;
     background: #ffffff;
     color: #0a66c2;
-    font-size: 12px;
+    font-size: 14px;
     white-space: nowrap;
 }
 

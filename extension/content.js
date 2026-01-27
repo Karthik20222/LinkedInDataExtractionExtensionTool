@@ -155,11 +155,11 @@ function extractProfileData(memberId) {
             full_name: fullName || 'Unknown',
             // Profile card headline (skills/summary text)
             headline: headline || '',
-            // Designation from Experience section
-            designation: exp.title || '',
+            // Designation from Experience section (company name)
+            designation: exp.company || currentCompany || '',
             location: location || '',
-            // Company from Experience section or top card
-            current_company: exp.company || currentCompany || '',
+            // Current job title from Experience section
+            current_company: exp.title || '',
             passout: edu.passout || '',
             qualification: edu.qualification || '',
             profile_url: window.location.href.split('?')[0],
@@ -216,26 +216,72 @@ function extractTitleFromEntity(entity) {
     try {
         const EMPLOYMENT_TYPES = /full[- ]?time|part[- ]?time|self[- ]?employed|contract|internship|intern|apprentice|trainee/i;
         const DURATION = /(\d+\s*(?:yr|yrs|year|years|mo|mos|month|months))/i;
+        const isLikelyCompany = /private limited|pvt|inc\.?|llc|llp|ltd/i;
+
+        const clean = (text) => (text || '').replace(/\s+/g, ' ').trim();
+        const isValidTitle = (text, companyHint = '') => {
+            const cleaned = clean(text);
+            if (!cleaned) return false;
+            if (EMPLOYMENT_TYPES.test(cleaned) || DURATION.test(cleaned)) return false;
+            if (isLikelyCompany.test(cleaned)) return false;
+            if (companyHint && cleaned.toLowerCase() === clean(companyHint).toLowerCase()) return false;
+            return true;
+        };
+
+        const companyHint = extractCompanyFromEntity(entity);
 
         // 1) Look for title in the pvs-entity__title specifically (main job title)
         const titleEl = entity.querySelector('.pvs-entity__title span[aria-hidden="true"]');
-        if (titleEl) {
-            const text = titleEl.innerText?.trim();
-            if (text && !EMPLOYMENT_TYPES.test(text) && !DURATION.test(text)) return text;
-        }
+        if (isValidTitle(titleEl?.innerText, companyHint)) return clean(titleEl.innerText);
 
-        // 2) Try any bold text at the top of the entity
-        const boldText = entity.querySelector('.t-bold')?.innerText?.trim();
-        if (boldText && !EMPLOYMENT_TYPES.test(boldText) && !DURATION.test(boldText)) return boldText;
+        // 2) New: role title inside position group role item (multi-role experiences)
+        const roleTitle = entity.querySelector('.pvs-entity__position-group-role-item__title span[aria-hidden="true"]');
+        if (isValidTitle(roleTitle?.innerText, companyHint)) return clean(roleTitle.innerText);
 
-        // 3) Try first h3/h4 heading
-        const heading = entity.querySelector('h3, h4')?.innerText?.trim();
-        if (heading && !EMPLOYMENT_TYPES.test(heading) && !DURATION.test(heading)) return heading;
+        // 3) Try any bold text at the top of the entity
+        const boldText = entity.querySelector('.t-bold')?.innerText;
+        if (isValidTitle(boldText, companyHint)) return clean(boldText);
+
+        // 4) Try first h3/h4 heading
+        const heading = entity.querySelector('h3, h4')?.innerText;
+        if (isValidTitle(heading, companyHint)) return clean(heading);
+
+        // 5) Fallback: parse visible lines and pick the first that looks like a role (not company)
+        const textLineTitle = extractTitleFromLines(entity, companyHint, { EMPLOYMENT_TYPES, DURATION });
+        if (textLineTitle) return textLineTitle;
 
         return '';
     } catch (_) {
         return '';
     }
+}
+
+// Fallback helper to pick a plausible title from innerText lines
+function extractTitleFromLines(entity, companyHint = '', patterns = {}) {
+    const { EMPLOYMENT_TYPES = /full[- ]?time|part[- ]?time|self[- ]?employed|contract|internship|intern|apprentice|trainee/i, DURATION = /(\d+\s*(?:yr|yrs|year|years|mo|mos|month|months))/i } = patterns;
+    const BAD_WORDS = /present|location|remote|hybrid|on-site|onsite/i;
+
+    const clean = (text) => (text || '').replace(/\s+/g, ' ').trim();
+    const normCompany = clean(companyHint).toLowerCase();
+
+    const lines = (entity.innerText || '')
+        .split('\n')
+        .map(clean)
+        .filter(Boolean);
+
+    for (const line of lines) {
+        const lower = line.toLowerCase();
+        if (normCompany && lower === normCompany) continue;
+        if (EMPLOYMENT_TYPES.test(line) || DURATION.test(line) || BAD_WORDS.test(line)) continue;
+        // Skip date-like or duration-like strings
+        if (/\b\d{4}\b/.test(line) || /present/i.test(line)) continue;
+        // Likely a role if it contains verbs or seniority keywords
+        if (/(engineer|manager|lead|director|architect|developer|designer|analyst|consultant|specialist|head|officer)/i.test(line)) return line;
+        // Otherwise, pick the first acceptable non-company text
+        if (!/company|education/i.test(line)) return line;
+    }
+
+    return '';
 }
 
 /**
@@ -309,8 +355,9 @@ function extractDurationFromEntity(entity) {
             const text = wrapper.innerText?.trim() || '';
             
             // Match patterns like "5 mos", "2 yrs", "1 yr 3 mos", "2 yrs 6 mos"
-            const yearsMatch = text.match(/(\d+)\s*(?:yr|yrs|year|years)/i);
-            const monthsMatch = text.match(/(\d+)\s*(?:mo|mos|month|months)/i);
+            // More flexible regex to catch variations
+            const yearsMatch = text.match(/(\d+)\s*y(?:ears?|rs?)/i);
+            const monthsMatch = text.match(/(\d+)\s*m(?:onths?|os?)/i);
             
             if (yearsMatch || monthsMatch) {
                 const years = yearsMatch ? parseInt(yearsMatch[1], 10) : 0;
@@ -322,8 +369,8 @@ function extractDurationFromEntity(entity) {
         // Fallback: check innerText lines for duration pattern
         const lines = (entity.innerText || '').split('\n').map(t => t.trim());
         for (const line of lines) {
-            const yearsMatch = line.match(/(\d+)\s*(?:yr|yrs|year|years)/i);
-            const monthsMatch = line.match(/(\d+)\s*(?:mo|mos|month|months)/i);
+            const yearsMatch = line.match(/(\d+)\s*y(?:ears?|rs?)/i);
+            const monthsMatch = line.match(/(\d+)\s*m(?:onths?|os?)/i);
             
             if (yearsMatch || monthsMatch) {
                 const years = yearsMatch ? parseInt(yearsMatch[1], 10) : 0;
@@ -357,8 +404,9 @@ function calculateTotalExperience(section) {
                 const text = wrapper.innerText?.trim() || '';
                 
                 // Match patterns like "5 mos", "2 yrs", "1 yr 3 mos"
-                const yearsMatch = text.match(/(\d+)\s*(?:yr|yrs|year|years)/i);
-                const monthsMatch = text.match(/(\d+)\s*(?:mo|mos|month|months)/i);
+                // More flexible regex to catch variations
+                const yearsMatch = text.match(/(\d+)\s*y(?:ears?|rs?)/i);
+                const monthsMatch = text.match(/(\d+)\s*m(?:onths?|os?)/i);
                 
                 if (yearsMatch || monthsMatch) {
                     const years = yearsMatch ? parseInt(yearsMatch[1], 10) : 0;
@@ -373,8 +421,8 @@ function calculateTotalExperience(section) {
             if (!found) {
                 const lines = (entity.innerText || '').split('\n').map(t => t.trim());
                 for (const line of lines) {
-                    const yearsMatch = line.match(/(\d+)\s*(?:yr|yrs|year|years)/i);
-                    const monthsMatch = line.match(/(\d+)\s*(?:mo|mos|month|months)/i);
+                    const yearsMatch = line.match(/(\d+)\s*y(?:ears?|rs?)/i);
+                    const monthsMatch = line.match(/(\d+)\s*m(?:onths?|os?)/i);
                     
                     if (yearsMatch || monthsMatch) {
                         const years = yearsMatch ? parseInt(yearsMatch[1], 10) : 0;
