@@ -15,6 +15,37 @@ let googleSheetsDB = null;
 let lastProcessTime = 0;
 const MIN_PROCESS_INTERVAL = 1500; // Minimum 1.5 seconds between processing attempts
 
+// Block malformed fetch/XHR requests at source
+const originalFetch = window.fetch;
+window.fetch = function(...args) {
+    const url = args[0];
+    // Silently reject invalid requests without logging
+    if (!url || typeof url !== 'string' || url === '/' || url === '' || url.includes('/invalid') || 
+        url.includes('gf1jbqula7hip12fm2vbpbanv') || !url.startsWith('http')) {
+        return Promise.reject(new Error('Invalid URL blocked'));
+    }
+    return originalFetch.apply(this, args);
+};
+
+// Block malformed XHR requests
+const originalOpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url, ...args) {
+    if (!url || typeof url !== 'string' || url === '/' || url === '' || url.includes('/invalid') || 
+        url.includes('gf1jbqula7hip12fm2vbpbanv') || !url.startsWith('http')) {
+        this._blockedRequest = true;
+        return;
+    }
+    return originalOpen.apply(this, [method, url, ...args]);
+};
+
+const originalXHRSend = XMLHttpRequest.prototype.send;
+XMLHttpRequest.prototype.send = function(...args) {
+    if (this._blockedRequest) {
+        throw new Error('Request blocked');
+    }
+    return originalXHRSend.apply(this, args);
+};
+
 // Debug logging
 const debug = (message, data = null) => {
     console.log(`[LinkedIn Tracker] ${message}`, data || '');
@@ -616,7 +647,11 @@ function extractCurrentCompany() {
  */
 async function checkCandidate(memberId) {
     try {
-        if (!googleSheetsDB || !googleSheetsDB.credentials.private_key) {
+        if (!googleSheetsDB) {
+            return { exists: false, requiresSetup: true };
+        }
+        
+        if (!googleSheetsDB.credentials || !googleSheetsDB.credentials.private_key) {
             return { exists: false, requiresSetup: true };
         }
 
@@ -861,9 +896,13 @@ function setupUrlObserver() {
     let lastUrl = window.location.href;
     let observerTimeout = null;
     let lastProcessTime = 0;
-    const MIN_INTERVAL = 2000; // Minimum 2 seconds between processes
+    const MIN_INTERVAL = 3000; // Minimum 3 seconds between processes
     
-    const observer = new MutationObserver(() => {
+    // Use history change detection instead of aggressive MutationObserver
+    const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
+    
+    const onURLChange = () => {
         const currentUrl = window.location.href;
         if (currentUrl !== lastUrl) {
             debug('URL changed, processing new profile...');
@@ -883,10 +922,24 @@ function setupUrlObserver() {
                 processCandidate();
             }, 1500 + delayNeeded);
         }
-    });
+    };
     
-    // Use a less aggressive observer configuration - only watch direct children, not entire subtree
-    observer.observe(document.body, { childList: true, subtree: false });
+    // Override pushState and replaceState to detect URL changes
+    window.history.pushState = function(...args) {
+        const result = originalPushState.apply(this, args);
+        onURLChange();
+        return result;
+    };
+    
+    window.history.replaceState = function(...args) {
+        const result = originalReplaceState.apply(this, args);
+        onURLChange();
+        return result;
+    };
+    
+    // Also listen for popstate events
+    window.addEventListener('popstate', onURLChange);
+    
     debug('✅ URL observer setup complete');
 }
 

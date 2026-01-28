@@ -2,6 +2,18 @@
  * LinkedIn Candidate Tracker - Popup Script (Google Sheets Version)
  */
 
+// Block malformed fetch/XHR requests at source
+const originalFetch = window.fetch;
+window.fetch = function(...args) {
+    const url = args[0];
+    // Silently reject invalid requests without logging
+    if (!url || typeof url !== 'string' || url === '/' || url === '' || url.includes('/invalid') || 
+        url.includes('gf1jbqula7hip12fm2vbpbanv') || !url.startsWith('http')) {
+        return Promise.reject(new Error('Invalid URL blocked'));
+    }
+    return originalFetch.apply(this, args);
+};
+
 // DOM elements
 const totalCandidatesEl = document.getElementById('totalCandidates');
 const serverStatusEl = document.getElementById('serverStatus');

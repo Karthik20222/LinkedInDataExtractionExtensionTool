@@ -51,6 +51,11 @@ class GoogleSheetsDB {
         if (!this.credentials) {
             throw new Error('Credentials not configured. Please set up in Settings.');
         }
+        
+        // Validate credentials before attempting authentication
+        if (!this.credentials.client_email || !this.credentials.private_key || !this.credentials.sheet_id) {
+            throw new Error('Invalid credentials: Missing required fields (client_email, private_key, or sheet_id).');
+        }
 
         // Check if token is still valid
         if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
@@ -114,20 +119,32 @@ class GoogleSheetsDB {
      */
     signJWT(message) {
         try {
+            // Validate credentials are set
+            if (!this.credentials || !this.credentials.private_key) {
+                throw new Error('Private key not configured');
+            }
+            
             // Check if jsrsasign is loaded
             if (typeof KJUR === 'undefined') {
                 throw new Error('jsrsasign library not loaded. Please reload the extension.');
             }
             
-            // Use jsrsasign library for RSA-SHA256 signing
-            // Convert literal \n to actual newlines
+            // Validate private key format
             const privateKey = this.credentials.private_key.replace(/\\n/g, '\n');
+            if (!privateKey.includes('BEGIN PRIVATE KEY') || !privateKey.includes('END PRIVATE KEY')) {
+                throw new Error('Invalid private key format. Must be a valid PEM-formatted private key.');
+            }
             
             // Create RSA key object from PEM string
             const sig = new KJUR.crypto.Signature({ "alg": "SHA256withRSA" });
             sig.init(privateKey);
             sig.updateString(message);
             const signatureHex = sig.sign();
+            
+            // Validate signature was generated
+            if (!signatureHex || signatureHex.length === 0) {
+                throw new Error('Failed to generate JWT signature');
+            }
             
             // Convert hex signature to base64url
             return this.hexToBase64Url(signatureHex);

@@ -39,15 +39,5 @@
     "default_popup": "popup.html",
     "default_title": "LinkedIn Recruiter Tracker"
   },
-  "options_page": "settings.html",
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "styles.css"
-      ],
-      "matches": [
-        "*://*.linkedin.com/*"
-      ]
-    }
-  ]
+  "options_page": "settings.html"
 }
