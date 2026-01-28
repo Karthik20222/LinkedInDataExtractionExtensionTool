@@ -33,13 +33,12 @@
 }
 
 .banner-content {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: flex-start;
-    justify-content: flex-start;
     max-width: 1200px;
     margin: 0 auto;
     gap: 20px;
-    flex-wrap: wrap;
 }
 
 .banner-icon {

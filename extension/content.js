@@ -12,6 +12,8 @@ if (typeof window.linkedInTrackerInitialized !== 'undefined') {
 let currentMemberId = null;
 let processingInProgress = false;
 let googleSheetsDB = null;
+let lastProcessTime = 0;
+const MIN_PROCESS_INTERVAL = 1500; // Minimum 1.5 seconds between processing attempts
 
 // Debug logging
 const debug = (message, data = null) => {
@@ -744,6 +746,15 @@ async function processCandidate() {
         debug('Processing already in progress, skipping...');
         return;
     }
+    
+    // Rate limiting to prevent infinite loops
+    const now = Date.now();
+    if (now - lastProcessTime < MIN_PROCESS_INTERVAL) {
+        debug('Processing called too frequently, deferring...');
+        return;
+    }
+    lastProcessTime = now;
+    
     processingInProgress = true;
 
     try {
@@ -844,20 +855,38 @@ function showErrorBanner(error) {
 }
 
 /**
- * Setup URL observer
+ * Setup URL observer with debounce to prevent infinite loops
  */
 function setupUrlObserver() {
     let lastUrl = window.location.href;
+    let observerTimeout = null;
+    let lastProcessTime = 0;
+    const MIN_INTERVAL = 2000; // Minimum 2 seconds between processes
+    
     const observer = new MutationObserver(() => {
         const currentUrl = window.location.href;
         if (currentUrl !== lastUrl) {
             debug('URL changed, processing new profile...');
             lastUrl = currentUrl;
             currentMemberId = null;
-            setTimeout(() => { processCandidate(); }, 1500);
+            
+            // Clear existing timeout to debounce
+            if (observerTimeout) clearTimeout(observerTimeout);
+            
+            // Only process if enough time has passed since last process
+            const now = Date.now();
+            const timeSinceLastProcess = now - lastProcessTime;
+            const delayNeeded = Math.max(0, MIN_INTERVAL - timeSinceLastProcess);
+            
+            observerTimeout = setTimeout(() => {
+                lastProcessTime = Date.now();
+                processCandidate();
+            }, 1500 + delayNeeded);
         }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    
+    // Use a less aggressive observer configuration - only watch direct children, not entire subtree
+    observer.observe(document.body, { childList: true, subtree: false });
     debug('✅ URL observer setup complete');
 }
 
