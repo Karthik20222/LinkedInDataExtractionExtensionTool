@@ -425,10 +425,17 @@ function calculateTotalExperience(section) {
     try {
         let totalMonths = 0;
         
-        // Find all experience entities in the section
+        // Find all top-level experience entities in the section
         const entities = section.querySelectorAll('[data-view-name="profile-component-entity"], li.artdeco-list__item, .pvs-entity');
         
         for (const entity of entities) {
+            // Skip nested role entries within a company (they're already counted in the company total)
+            // Check if this entity is nested inside another pvs-entity
+            const parent = entity.parentElement?.closest('.pvs-entity');
+            if (parent && parent !== entity) {
+                continue; // Skip nested roles
+            }
+            
             // Look for duration text in caption wrapper
             const captionWrappers = entity.querySelectorAll('.pvs-entity__caption-wrapper, span.t-14.t-normal.t-black--light span[aria-hidden="true"]');
             
@@ -450,7 +457,7 @@ function calculateTotalExperience(section) {
                 }
             }
             
-            // Fallback: check innerText lines
+            // Fallback: check innerText lines (only first occurrence to avoid nested roles)
             if (!found) {
                 const lines = (entity.innerText || '').split('\n').map(t => t.trim());
                 for (const line of lines) {
