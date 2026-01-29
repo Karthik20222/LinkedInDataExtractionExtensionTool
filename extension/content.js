@@ -127,27 +127,79 @@ function extractProfileData(memberId) {
             'h1.t-24',
             '.artdeco-entity-lockup__title',
             '[data-test-profile-name]',
-            '.ph5 h1'
+            '.ph5 h1',
+            // Details page: name in the profile card header
+            '.pv-top-card h1',
+            '.scaffold-layout__detail h1',
+            '.artdeco-card h1',
+            // Details page: header with back arrow contains the name
+            '.scaffold-layout__detail .artdeco-entity-lockup__title span',
+            '.pv-profile-card__anchor span.t-bold',
+            // The back button area often has the name
+            '.scaffold-layout__detail header h1',
+            '[class*="profile-card"] h3'
         ];
 
         let fullName = '';
         for (const selector of nameSelectors) {
             const el = document.querySelector(selector);
             if (el && el.textContent) {
-                fullName = el.textContent.trim();
-                if (fullName) break;
+                const text = el.textContent.trim();
+                // Skip if it looks like a company name or generic text
+                if (text && !/(linkedin|experience|education|skills|company)/i.test(text)) {
+                    fullName = text;
+                    break;
+                }
+            }
+        }
+        
+        // Details page: try to get name from the profile link in header
+        if (!fullName) {
+            const profileLink = document.querySelector('a[href*="/in/"] span.t-bold, .scaffold-layout__detail a span.t-bold');
+            if (profileLink && profileLink.textContent) {
+                fullName = profileLink.textContent.trim();
             }
         }
 
+        // Fallback: extract from meta title, but clean it properly
         if (!fullName) {
-            const titleMatch = (getMeta('og:title') || document.title).match(/^([^|]+)/);
-            fullName = titleMatch ? titleMatch[1].trim() : 'Unknown Candidate';
+            const ogTitle = getMeta('og:title') || '';
+            const pageTitle = document.title || '';
+            
+            // Try og:title first (usually cleaner)
+            let titleMatch = ogTitle.match(/^([^|–\-]+)/);
+            if (titleMatch) {
+                const extracted = titleMatch[1].trim();
+                // Skip if it's a LinkedIn tab title
+                if (!/(^\(\d+\)\s*)?linkedin$/i.test(extracted)) {
+                    fullName = extracted;
+                }
+            }
+            
+            // If og:title failed, try page title but exclude LinkedIn patterns
+            if (!fullName || fullName.toLowerCase().includes('linkedin')) {
+                titleMatch = pageTitle.match(/^([^|–\-]+)/);
+                if (titleMatch) {
+                    const extracted = titleMatch[1].trim();
+                    // Skip if it looks like a LinkedIn title "(3) LinkedIn" or just "LinkedIn"
+                    if (!/(^\(\d+\)\s*)?linkedin$/i.test(extracted) && !extracted.toLowerCase().includes('linkedin')) {
+                        fullName = extracted;
+                    }
+                }
+            }
+            
+            if (!fullName) fullName = 'Unknown Candidate';
         }
+        
+        debug('Extracted name:', fullName);
 
         const headlineSelectors = [
             '.text-body-medium.break-words',
             '.pv-text-details__left-panel .text-body-medium',
-            '[data-test-profile-headline]'
+            '[data-test-profile-headline]',
+            // Details page headline location
+            '.artdeco-entity-lockup__subtitle',
+            '.pv-top-card .text-body-medium'
         ];
         let headline = '';
         for (const selector of headlineSelectors) {
@@ -157,18 +209,30 @@ function extractProfileData(memberId) {
                 if (headline) break;
             }
         }
+        
+        // Fallback: extract headline from meta description
+        if (!headline) {
+            const metaDesc = getMeta('og:description') || '';
+            // LinkedIn meta description often has the headline
+            if (metaDesc && !metaDesc.toLowerCase().includes('view') && !metaDesc.toLowerCase().includes('profile')) {
+                headline = metaDesc.split('.')[0].trim();
+            }
+        }
 
         const locationSelectors = [
             'span.text-body-small.inline.t-black--light.break-words',
             '.pv-text-details__left-panel .text-body-small:not(.break-words)',
-            '[data-test-profile-location]'
+            '[data-test-profile-location]',
+            // Additional selectors for different page layouts
+            '.pv-top-card .text-body-small',
+            '.artdeco-entity-lockup__caption'
         ];
         let location = '';
         for (const selector of locationSelectors) {
             const el = document.querySelector(selector);
             if (el && el.textContent) {
                 const text = el.textContent.trim();
-                if (text && text.length > 2 && !text.includes('·') && !text.includes('follower')) {
+                if (text && text.length > 2 && !text.includes('·') && !text.includes('follower') && !text.includes('connection')) {
                     location = text;
                     break;
                 }
@@ -183,6 +247,14 @@ function extractProfileData(memberId) {
         // Try to extract latest education and passout year from Education section
         const edu = extractLatestEducation();
 
+        // Get clean profile URL (remove /details/experience or other sub-pages)
+        let profileUrl = window.location.href.split('?')[0];
+        // If we're on a details sub-page, extract the main profile URL
+        const detailsMatch = profileUrl.match(/(https?:\/\/[^/]+\/in\/[^/]+)/);
+        if (detailsMatch) {
+            profileUrl = detailsMatch[1] + '/';
+        }
+        
         const profileData = {
             member_id: memberId,
             full_name: fullName || 'Unknown',
@@ -195,7 +267,7 @@ function extractProfileData(memberId) {
             current_company: exp.title || '',
             passout: edu.passout || '',
             qualification: edu.qualification || '',
-            profile_url: window.location.href.split('?')[0],
+            profile_url: profileUrl,
             // Years of experience
             years_at_current: exp.yearsAtCurrent || '',
             total_years_experience: exp.totalYears || ''
@@ -214,27 +286,70 @@ function extractProfileData(memberId) {
  */
 function extractLatestExperience() {
     try {
-        const anchor = document.querySelector('#experience');
-        let section = anchor ? anchor.closest('section') : null;
-        if (!section) {
-            // Fallback: find a section that contains the word "Experience"
-            section = Array.from(document.querySelectorAll('section')).find(sec => /experience/i.test(sec.textContent || '')) || null;
+        let section = null;
+        const url = window.location.href;
+        
+        // Check if we're on the experience details page
+        const isDetailsPage = url.includes('/details/experience');
+        
+        if (isDetailsPage) {
+            // On details page, the main content area IS the experience section
+            section = document.querySelector('.scaffold-layout__main, main, .pvs-list__container');
+            if (!section) {
+                section = document.querySelector('[class*="scaffold"]') || document.body;
+            }
+            debug('On experience details page, using main content as section');
+        } else {
+            // On main profile page, find the Experience section
+            const anchor = document.querySelector('#experience');
+            section = anchor ? anchor.closest('section') : null;
+            if (!section) {
+                // Fallback: find a section that contains the word "Experience"
+                section = Array.from(document.querySelectorAll('section')).find(sec => {
+                    const header = sec.querySelector('h2, .pvs-header__title');
+                    return header && /experience/i.test(header.textContent || '');
+                }) || null;
+            }
         }
-        if (!section) return { title: '', company: '', yearsAtCurrent: '', totalYears: '' };
+        
+        if (!section) {
+            debug('Could not find experience section');
+            return { title: '', company: '', yearsAtCurrent: '', totalYears: '' };
+        }
 
-        // Find first experience entity
-        const entity = section.querySelector('[data-view-name="profile-component-entity"], li.artdeco-list__item, .pvs-entity');
-        if (!entity) return { title: '', company: '', yearsAtCurrent: '', totalYears: '' };
+        // Find first experience entity - try multiple selectors for different page layouts
+        let entity = section.querySelector('[data-view-name="profile-component-entity"]');
+        if (!entity) {
+            entity = section.querySelector('.pvs-list__paged-list-item .pvs-entity');
+        }
+        if (!entity) {
+            entity = section.querySelector('li.artdeco-list__item');
+        }
+        if (!entity) {
+            entity = section.querySelector('.pvs-entity');
+        }
+        if (!entity) {
+            // On details page, the first list item with experience data
+            entity = section.querySelector('.pvs-list > li, ul > li.pvs-list__item--line-separated');
+        }
+        
+        if (!entity) {
+            debug('Could not find any experience entity');
+            return { title: '', company: '', yearsAtCurrent: '', totalYears: '' };
+        }
+        
+        debug('Found experience entity:', entity.innerText?.substring(0, 100));
 
         // Use dedicated helpers for robust extraction
         const title = extractTitleFromEntity(entity);
         const company = extractCompanyFromEntity(entity);
 
-        // Extract years at current company (from first/current experience)
-        const yearsAtCurrent = extractDurationFromEntity(entity);
+        // Extract years at current company (from first/current role, not company total)
+        const yearsAtCurrent = extractCurrentRoleDuration(entity);
         
         // Calculate total years of experience from all positions
         const totalYears = calculateTotalExperience(section);
+        console.log('[extractLatestExperience] totalYears calculated:', totalYears);
 
         return { title, company, yearsAtCurrent, totalYears };
     } catch (_) {
@@ -419,67 +534,120 @@ function extractDurationFromEntity(entity) {
 }
 
 /**
+ * Extract duration from the current role (not company total)
+ * For multi-role companies, finds the first role with "Present"
+ */
+function extractCurrentRoleDuration(entity) {
+    try {
+        const allText = entity.innerText || '';
+        
+        // Check if this is a multi-role entry (has nested roles)
+        const nestedRoles = entity.querySelectorAll('.pvs-entity__sub-components .pvs-entity, .pvs-list__paged-list-item .pvs-entity');
+        
+        if (nestedRoles.length > 0) {
+            // Multi-role company: find the role with "Present"
+            for (const role of nestedRoles) {
+                const roleText = role.innerText || '';
+                if (/present/i.test(roleText)) {
+                    // Extract duration from this current role
+                    return extractDurationFromEntity(role);
+                }
+            }
+            // Fallback: return first role's duration
+            return extractDurationFromEntity(nestedRoles[0]);
+        } else {
+            // Single role: extract duration normally
+            return extractDurationFromEntity(entity);
+        }
+    } catch (_) {
+        return '';
+    }
+}
+
+/**
  * Calculate total years of experience from all experience entries
  */
 function calculateTotalExperience(section) {
     try {
         let totalMonths = 0;
+        const processedDurations = new Set(); // Track what we've already counted
         
-        // Find all top-level experience entities in the section
-        const entities = section.querySelectorAll('[data-view-name="profile-component-entity"], li.artdeco-list__item, .pvs-entity');
+        // Find all top-level list items in the experience section
+        // Try multiple selectors for different page layouts
+        let topLevelItems = section.querySelectorAll(':scope > div > ul > li.artdeco-list__item');
         
-        for (const entity of entities) {
-            // Skip nested role entries within a company (they're already counted in the company total)
-            // Check if this entity is nested inside another pvs-entity
-            const parent = entity.parentElement?.closest('.pvs-entity');
-            if (parent && parent !== entity) {
-                continue; // Skip nested roles
+        // Fallback selectors for different page structures
+        if (topLevelItems.length === 0) {
+            topLevelItems = section.querySelectorAll('.pvs-list__paged-list-item');
+        }
+        if (topLevelItems.length === 0) {
+            topLevelItems = section.querySelectorAll('li.artdeco-list__item');
+        }
+        if (topLevelItems.length === 0) {
+            // Experience details page: each experience is a list item
+            topLevelItems = section.querySelectorAll('.pvs-list > li, ul > li.pvs-list__item--line-separated');
+        }
+        
+        console.log('[calculateTotalExperience] Found', topLevelItems.length, 'top-level items');
+        
+        for (const item of topLevelItems) {
+            // Look for the FIRST duration text in this top-level item
+            // This will be the company-level duration for multi-role entries
+            // or the single role duration for single-role entries
+            const allText = item.innerText || '';
+            
+            // Skip internships and part-time jobs
+            // Only skip if it's explicitly marked as internship employment type, not just because title contains "trainee"
+            const isInternship = /\b(internship)\s*[·•\-]|\bemployment type:\s*internship/i.test(allText) ||
+                                 /\bintern\s*[·•\-]/i.test(allText); // "Intern · 2 mos" pattern
+            const isPartTime = /\bpart[- ]?time\s*[·•\-]/i.test(allText);
+            
+            if (isInternship || isPartTime) {
+                console.log('[calculateTotalExperience] Skipping internship/part-time:', allText.substring(0, 50));
+                continue; // Skip this entry
             }
             
-            // Look for duration text in caption wrapper
-            const captionWrappers = entity.querySelectorAll('.pvs-entity__caption-wrapper, span.t-14.t-normal.t-black--light span[aria-hidden="true"]');
+            // Find the first occurrence of duration pattern
+            const durationPattern = /(\d+)\s*y(?:ears?|rs?)?\s*(?:(\d+)\s*m(?:onths?|os?)?)?|(\d+)\s*m(?:onths?|os?)/i;
+            const match = allText.match(durationPattern);
             
-            let found = false;
-            for (const wrapper of captionWrappers) {
-                const text = wrapper.innerText?.trim() || '';
+            if (match) {
+                let years = 0;
+                let months = 0;
                 
-                // Match patterns like "5 mos", "2 yrs", "1 yr 3 mos"
-                // More flexible regex to catch variations
-                const yearsMatch = text.match(/(\d+)\s*y(?:ears?|rs?)/i);
-                const monthsMatch = text.match(/(\d+)\s*m(?:onths?|os?)/i);
-                
-                if (yearsMatch || monthsMatch) {
-                    const years = yearsMatch ? parseInt(yearsMatch[1], 10) : 0;
-                    const months = monthsMatch ? parseInt(monthsMatch[1], 10) : 0;
-                    totalMonths += (years * 12) + months;
-                    found = true;
-                    break;
+                if (match[1]) {
+                    // Pattern like "2 yrs 8 mos" or "2 yrs"
+                    years = parseInt(match[1], 10);
+                    months = match[2] ? parseInt(match[2], 10) : 0;
+                } else if (match[3]) {
+                    // Pattern like "8 mos" only
+                    months = parseInt(match[3], 10);
                 }
-            }
-            
-            // Fallback: check innerText lines (only first occurrence to avoid nested roles)
-            if (!found) {
-                const lines = (entity.innerText || '').split('\n').map(t => t.trim());
-                for (const line of lines) {
-                    const yearsMatch = line.match(/(\d+)\s*y(?:ears?|rs?)/i);
-                    const monthsMatch = line.match(/(\d+)\s*m(?:onths?|os?)/i);
-                    
-                    if (yearsMatch || monthsMatch) {
-                        const years = yearsMatch ? parseInt(yearsMatch[1], 10) : 0;
-                        const months = monthsMatch ? parseInt(monthsMatch[1], 10) : 0;
-                        totalMonths += (years * 12) + months;
-                        break;
-                    }
+                
+                // Create a unique identifier for this duration to avoid duplicates
+                const durationKey = `${years}-${months}`;
+                const position = allText.indexOf(match[0]);
+                const uniqueKey = `${durationKey}-${position}`;
+                
+                if (!processedDurations.has(uniqueKey)) {
+                    totalMonths += (years * 12) + months;
+                    processedDurations.add(uniqueKey);
+                    console.log('[calculateTotalExperience] Added:', years, 'yrs', months, 'mos. Total:', totalMonths, 'months');
                 }
             }
         }
+        
+        console.log('[calculateTotalExperience] Final totalMonths:', totalMonths);
         
         if (totalMonths === 0) return '';
         
         const totalYears = Math.floor(totalMonths / 12);
         const remainingMonths = totalMonths % 12;
-        return formatDuration(totalYears, remainingMonths);
-    } catch (_) {
+        const result = formatDuration(totalYears, remainingMonths);
+        console.log('[calculateTotalExperience] Returning:', result);
+        return result;
+    } catch (e) {
+        console.error('Error calculating total experience:', e);
         return '';
     }
 }

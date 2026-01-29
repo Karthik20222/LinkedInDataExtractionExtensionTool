@@ -136,6 +136,13 @@
     font-size: 14px;
     box-sizing: border-box;
     grid-column: 1 / -1;
+    color: white;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.tracker-input::placeholder,
+.tracker-textarea::placeholder {
+    color: rgba(255, 255, 255, 0.6);
 }
 
 .tracker-actions {
