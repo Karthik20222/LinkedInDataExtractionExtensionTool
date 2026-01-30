@@ -115,12 +115,18 @@ function extractMemberId() {
 
 /**
  * Extract candidate profile data from LinkedIn page
+ * Enhanced with better selectors and fallback logic
  */
 function extractProfileData(memberId) {
     try {
         const getMeta = (prop) => document.querySelector(`meta[property="${prop}"]`)?.getAttribute('content') || '';
+        const getMeta2 = (name) => document.querySelector(`meta[name="${name}"]`)?.getAttribute('content') || '';
 
+        // ============================================
+        // IMPROVED NAME EXTRACTION
+        // ============================================
         const nameSelectors = [
+            // Priority 1: Direct headline h1 selectors (most reliable)
             'h1.text-heading-xlarge',
             'div.pv-text-details__left-panel h1',
             'h1.profile-topcard__name',
@@ -128,16 +134,24 @@ function extractProfileData(memberId) {
             '.artdeco-entity-lockup__title',
             '[data-test-profile-name]',
             '.ph5 h1',
-            // Details page: name in the profile card header
+            
+            // Priority 2: Details page layouts
             '.pv-top-card h1',
             '.scaffold-layout__detail h1',
             '.artdeco-card h1',
-            // Details page: header with back arrow contains the name
             '.scaffold-layout__detail .artdeco-entity-lockup__title span',
             '.pv-profile-card__anchor span.t-bold',
-            // The back button area often has the name
             '.scaffold-layout__detail header h1',
-            '[class*="profile-card"] h3'
+            '[class*="profile-card"] h3',
+            
+            // Priority 3: Recruiter view layouts
+            '.profile-topcard__title',
+            'span.pv-entity__subtitle',
+            'span.text-heading-medium',
+            
+            // Priority 4: Title-like headers
+            '.profile-title',
+            '.profile-name'
         ];
 
         let fullName = '';
@@ -146,45 +160,69 @@ function extractProfileData(memberId) {
             if (el && el.textContent) {
                 const text = el.textContent.trim();
                 // Skip if it looks like a company name or generic text
-                if (text && !/(linkedin|experience|education|skills|company)/i.test(text)) {
+                if (text && text.length > 1 && !/(linkedin|experience|education|skills|company|pending|message|follow|endorsement)/i.test(text)) {
                     fullName = text;
                     break;
                 }
             }
         }
         
-        // Details page: try to get name from the profile link in header
+        // Fallback: try to get name from profile links
         if (!fullName) {
-            const profileLink = document.querySelector('a[href*="/in/"] span.t-bold, .scaffold-layout__detail a span.t-bold');
-            if (profileLink && profileLink.textContent) {
-                fullName = profileLink.textContent.trim();
+            const profileLinks = document.querySelectorAll('a[href*="/in/"] span.t-bold, .scaffold-layout__detail a span.t-bold');
+            for (const link of profileLinks) {
+                const text = link.textContent.trim();
+                if (text && text.length > 1 && !/(linkedin|experience|education)/i.test(text)) {
+                    fullName = text;
+                    break;
+                }
             }
         }
 
-        // Fallback: extract from meta title, but clean it properly
+        // Fallback: extract from meta tags
         if (!fullName) {
             const ogTitle = getMeta('og:title') || '';
+            const twitterTitle = getMeta('twitter:title') || '';
             const pageTitle = document.title || '';
+            const metaDescription = getMeta2('description') || '';
             
             // Try og:title first (usually cleaner)
-            let titleMatch = ogTitle.match(/^([^|–\-]+)/);
+            let titleMatch = ogTitle.match(/^([^|–\-\(\)]+)/);
             if (titleMatch) {
                 const extracted = titleMatch[1].trim();
                 // Skip if it's a LinkedIn tab title
-                if (!/(^\(\d+\)\s*)?linkedin$/i.test(extracted)) {
+                if (extracted && extracted.length > 1 && !/(^\(\d+\)\s*)?linkedin$/i.test(extracted)) {
                     fullName = extracted;
                 }
             }
             
-            // If og:title failed, try page title but exclude LinkedIn patterns
-            if (!fullName || fullName.toLowerCase().includes('linkedin')) {
-                titleMatch = pageTitle.match(/^([^|–\-]+)/);
+            // Try twitter title
+            if (!fullName) {
+                titleMatch = twitterTitle.match(/^([^|–\-\(\)]+)/);
                 if (titleMatch) {
                     const extracted = titleMatch[1].trim();
-                    // Skip if it looks like a LinkedIn title "(3) LinkedIn" or just "LinkedIn"
-                    if (!/(^\(\d+\)\s*)?linkedin$/i.test(extracted) && !extracted.toLowerCase().includes('linkedin')) {
+                    if (extracted && extracted.length > 1 && !/(^\(\d+\)\s*)?linkedin$/i.test(extracted)) {
                         fullName = extracted;
                     }
+                }
+            }
+            
+            // Try page title but exclude LinkedIn patterns
+            if (!fullName) {
+                titleMatch = pageTitle.match(/^([^|–\-\(\)]+)/);
+                if (titleMatch) {
+                    const extracted = titleMatch[1].trim();
+                    if (extracted && extracted.length > 1 && !/(^\(\d+\)\s*)?linkedin$/i.test(extracted) && !extracted.toLowerCase().includes('linkedin')) {
+                        fullName = extracted;
+                    }
+                }
+            }
+            
+            // Last resort: extract first and last name from meta description if available
+            if (!fullName && metaDescription) {
+                const nameMatch = metaDescription.match(/^([^|–\-]+?)\s+(?:is|at|works|current)/i);
+                if (nameMatch) {
+                    fullName = nameMatch[1].trim();
                 }
             }
             
@@ -193,51 +231,131 @@ function extractProfileData(memberId) {
         
         debug('Extracted name:', fullName);
 
+        // ============================================
+        // IMPROVED HEADLINE EXTRACTION
+        // ============================================
         const headlineSelectors = [
+            // Priority 1: Current role/position selectors
             '.text-body-medium.break-words',
             '.pv-text-details__left-panel .text-body-medium',
             '[data-test-profile-headline]',
-            // Details page headline location
+            
+            // Priority 2: Details page layouts
             '.artdeco-entity-lockup__subtitle',
-            '.pv-top-card .text-body-medium'
+            '.pv-top-card .text-body-medium',
+            '.pv-text-details__headline',
+            
+            // Priority 3: Alternative layouts
+            'span.text-body-medium',
+            '.headline',
+            '[class*="headline"]',
+            
+            // Priority 4: Experience section (current role)
+            '.pvs-entity__headline span[aria-hidden="true"]',
+            '.profile-card-headline'
         ];
+        
         let headline = '';
         for (const selector of headlineSelectors) {
             const el = document.querySelector(selector);
             if (el && el.textContent) {
-                headline = el.textContent.trim();
-                if (headline) break;
+                const text = el.textContent.trim();
+                // Filter out navigation items and metadata
+                if (text && text.length > 3 && !/(message|follow|more|endorsement|connection|save|report|view)/i.test(text)) {
+                    headline = text;
+                    break;
+                }
             }
         }
         
-        // Fallback: extract headline from meta description
+        // Fallback: extract from meta tags
         if (!headline) {
-            const metaDesc = getMeta('og:description') || '';
-            // LinkedIn meta description often has the headline
-            if (metaDesc && !metaDesc.toLowerCase().includes('view') && !metaDesc.toLowerCase().includes('profile')) {
-                headline = metaDesc.split('.')[0].trim();
+            const ogDescription = getMeta('og:description') || '';
+            const twitterDescription = getMeta('twitter:description') || '';
+            const metaDescription = getMeta2('description') || '';
+            
+            // Try og:description (usually contains "Job Title at Company")
+            if (ogDescription && !ogDescription.toLowerCase().includes('view') && !ogDescription.toLowerCase().includes('profile')) {
+                const firstSentence = ogDescription.split(/[.!?]/)[0].trim();
+                if (firstSentence.length > 3) {
+                    headline = firstSentence;
+                }
+            }
+            
+            // Try twitter description
+            if (!headline && twitterDescription && !twitterDescription.toLowerCase().includes('profile')) {
+                const firstSentence = twitterDescription.split(/[.!?]/)[0].trim();
+                if (firstSentence.length > 3) {
+                    headline = firstSentence;
+                }
+            }
+            
+            // Try meta description
+            if (!headline && metaDescription) {
+                const firstSentence = metaDescription.split(/[.!?]/)[0].trim();
+                if (firstSentence.length > 3 && !/(view|profile|view more)/i.test(firstSentence)) {
+                    headline = firstSentence;
+                }
             }
         }
+        
+        debug('Extracted headline:', headline);
 
+        // ============================================
+        // IMPROVED LOCATION EXTRACTION
+        // ============================================
         const locationSelectors = [
+            // Priority 1: Direct location spans
             'span.text-body-small.inline.t-black--light.break-words',
             '.pv-text-details__left-panel .text-body-small:not(.break-words)',
             '[data-test-profile-location]',
-            // Additional selectors for different page layouts
+            
+            // Priority 2: Top card locations
             '.pv-top-card .text-body-small',
-            '.artdeco-entity-lockup__caption'
+            '.profile-topcard__location',
+            '.artdeco-entity-lockup__caption',
+            
+            // Priority 3: Alternative layouts
+            'span[data-test-profile-location]',
+            '.profile-location',
+            '[class*="location"]',
+            
+            // Priority 4: Text nodes in profile header
+            '.pv-text-details__left-panel span.text-body-small'
         ];
+        
         let location = '';
         for (const selector of locationSelectors) {
             const el = document.querySelector(selector);
             if (el && el.textContent) {
                 const text = el.textContent.trim();
-                if (text && text.length > 2 && !text.includes('·') && !text.includes('follower') && !text.includes('connection')) {
+                // Filter out metadata and navigation
+                if (text && text.length > 2 && !/(·|•|follower|connection|following|save|message|more)/i.test(text)) {
                     location = text;
                     break;
                 }
             }
         }
+        
+        // Fallback: extract city and country from meta tags
+        if (!location) {
+            // LinkedIn's og:image URL sometimes contains location info
+            const ogImage = getMeta('og:image') || '';
+            // Try to extract from HTML structured data if available
+            const locationScript = document.querySelector('script[type="application/ld+json"]');
+            if (locationScript) {
+                try {
+                    const jsonLD = JSON.parse(locationScript.textContent);
+                    if (jsonLD.jobTitle && jsonLD.areaServed) {
+                        location = jsonLD.areaServed;
+                    }
+                } catch (e) {
+                    // Silent fail
+                }
+            }
+        }
+        
+        debug('Extracted location:', location);
 
         const currentCompany = extractCurrentCompany();
 
@@ -246,6 +364,11 @@ function extractProfileData(memberId) {
 
         // Try to extract latest education and passout year from Education section
         const edu = extractLatestEducation();
+
+        // Extract new fields for enhanced candidate assessment
+        const skills = extractTopSkills();
+        const industry = extractIndustry();
+        const connections = extractConnectionCount();
 
         // Get clean profile URL (remove /details/experience or other sub-pages)
         let profileUrl = window.location.href.split('?')[0];
@@ -256,21 +379,39 @@ function extractProfileData(memberId) {
         }
         
         const profileData = {
+            // ===== CORE INFORMATION =====
             member_id: memberId,
             full_name: fullName || 'Unknown',
-            // Profile card headline (skills/summary text)
+            profile_url: profileUrl,
+            
+            // ===== CURRENT POSITION & COMPANY =====
             headline: headline || '',
             // Designation from Experience section (company name)
             designation: exp.company || currentCompany || '',
-            location: location || '',
             // Current job title from Experience section
             current_company: exp.title || '',
+            industry: industry || '',
+            
+            // ===== LOCATION =====
+            location: location || '',
+            
+            // ===== EDUCATION =====
             passout: edu.passout || '',
             qualification: edu.qualification || '',
-            profile_url: profileUrl,
-            // Years of experience
+            education: edu.education || '',
+            
+            // ===== EXPERIENCE =====
             years_at_current: exp.yearsAtCurrent || '',
-            total_years_experience: exp.totalYears || ''
+            total_years_experience: exp.totalYears || '',
+            
+            // ===== NEW FIELDS - SKILLS & NETWORK =====
+            top_skills: skills || [],
+            top_skills_string: skills.join(', ') || '', // For easy display in sheets
+            connections: connections || '',
+            
+            // ===== METADATA =====
+            extracted_at: new Date().toISOString(),
+            extracted_date: new Date().toLocaleDateString()
         };
 
         debug('Extracted profile data:', profileData);
@@ -789,6 +930,146 @@ function extractLatestEducation() {
         return { education, passout, qualification };
     } catch (_) {
         return { education: '', passout: '', qualification: '' };
+    }
+}
+
+/**
+ * Extract top 5 skills from profile
+ */
+function extractTopSkills() {
+    try {
+        const skills = [];
+        const skillSelectors = [
+            // Priority 1: Skill endorsements section
+            '[data-test-profile-skill-item] span[aria-hidden="true"]',
+            '.pv-skill-category-entity__name',
+            '[data-test-skill]',
+            
+            // Priority 2: Skills section items
+            '.artdeco-list__item .artdeco-entity-lockup__title',
+            '.pvs-list__item--line-separated .artdeco-entity-lockup__title',
+            
+            // Priority 3: Any skill badges
+            '.skill-badge',
+            '[class*="skill"]',
+            
+            // Priority 4: Text in skills section
+            '.pv-skill span[aria-hidden="true"]'
+        ];
+
+        // Find the skills section
+        let skillsSection = document.querySelector('#skills');
+        if (!skillsSection) {
+            skillsSection = Array.from(document.querySelectorAll('section')).find(sec => 
+                /skills/i.test(sec.querySelector('h2')?.textContent || '')
+            );
+        }
+
+        if (!skillsSection) {
+            skillsSection = document.body;
+        }
+
+        // Extract skills from various selectors
+        const skillElements = skillsSection.querySelectorAll('[data-test-profile-skill-item] span[aria-hidden="true"], .pv-skill-category-entity__name');
+        for (const el of skillElements) {
+            if (skills.length >= 5) break;
+            const skillText = el.textContent.trim();
+            if (skillText && skillText.length > 1 && !/(endorse|pending|remove|skill)/i.test(skillText)) {
+                skills.push(skillText);
+            }
+        }
+
+        // If not enough skills, try alternative selectors
+        if (skills.length < 5) {
+            const altElements = skillsSection.querySelectorAll('[class*="skill-item"], .skill-badge, span.skill-text');
+            for (const el of altElements) {
+                if (skills.length >= 5) break;
+                const skillText = el.textContent.trim();
+                if (skillText && skillText.length > 1 && !skills.includes(skillText)) {
+                    skills.push(skillText);
+                }
+            }
+        }
+
+        debug('Extracted skills:', skills);
+        return skills.slice(0, 5); // Return only top 5
+    } catch (error) {
+        debug('Error extracting skills:', error);
+        return [];
+    }
+}
+
+/**
+ * Extract industry from profile
+ */
+function extractIndustry() {
+    try {
+        // Check if there's an industry field on the profile
+        const industrySelectors = [
+            '[data-test-profile-industry]',
+            '.pv-about-section .text-body-small',
+            '.profile-industry',
+            'span[aria-label*="industry"]',
+            '[class*="industry"]'
+        ];
+
+        for (const selector of industrySelectors) {
+            const el = document.querySelector(selector);
+            if (el && el.textContent) {
+                const text = el.textContent.trim();
+                if (text && text.length > 2 && !/industry|profile|about/i.test(text)) {
+                    return text;
+                }
+            }
+        }
+
+        // Fallback: extract from headline or current company
+        const headline = document.querySelector('[data-test-profile-headline]')?.textContent || '';
+        const industryMatch = headline.match(/(?:in|at|with)\s+([A-Za-z\s&]+)(?:\s+industry|\s+field)?/i);
+        if (industryMatch) {
+            return industryMatch[1].trim();
+        }
+
+        return '';
+    } catch (error) {
+        debug('Error extracting industry:', error);
+        return '';
+    }
+}
+
+/**
+ * Extract connection count from profile
+ */
+function extractConnectionCount() {
+    try {
+        const connectionSelectors = [
+            '[data-test-profile-connection-count]',
+            '.pv-text-details__left-panel .text-body-small:contains("connection")',
+            'span[aria-label*="connection"]',
+            'span.t-14.t-normal.t-black--light:contains("+")'
+        ];
+
+        // Try regex search in visible text
+        const allText = document.body.innerText;
+        const connectionMatch = allText.match(/(\d+(?:,\d+)?|\d+[KM])\s*(?:connection|follower)/i);
+        if (connectionMatch) {
+            return connectionMatch[1];
+        }
+
+        // Try to find connection count in common locations
+        const connectionElements = document.querySelectorAll('span.t-14, .text-body-small, [class*="connection"]');
+        for (const el of connectionElements) {
+            const text = el.textContent;
+            if (/^\d+(?:,\d+)?|\d+[KM]\s*(?:connection)/i.test(text)) {
+                const match = text.match(/(\d+(?:,\d+)?|\d+[KM])/);
+                if (match) return match[1];
+            }
+        }
+
+        return '';
+    } catch (error) {
+        debug('Error extracting connection count:', error);
+        return '';
     }
 }
 
